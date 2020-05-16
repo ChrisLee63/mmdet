@@ -12,6 +12,18 @@ from mmdet.apis import multi_gpu_test, single_gpu_test
 from mmdet.core import wrap_fp16_model
 from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
+import pickle as pk
+
+
+def pickle(data, file_path):
+    with open(file_path, "wb") as f:
+        pk.dump(data, f, pk.HIGHEST_PROTOCOL)
+
+
+def unpickle(file_path):
+    with open(file_path, "rb") as f:
+        data = pk.load(f)
+    return data
 
 
 def parse_args():
@@ -123,8 +135,11 @@ def main():
 
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
+        gallery_det, gallery_feat, probe_feat = single_gpu_test(model, data_loader, args.show, args.show_dir,
                                   args.show_score_thr)
+        pickle(gallery_det, "gallery_det.pkl")
+        pickle(gallery_feat, "gallery_feat.pkl")
+        pickle(probe_feat, "probe_feat.pkl")
     else:
         model = MMDistributedDataParallel(
             model.cuda(),
@@ -142,7 +157,7 @@ def main():
         if args.format_only:
             dataset.format_results(outputs, **kwargs)
         if args.eval:
-            dataset.evaluate(outputs, args.eval, **kwargs)
+            dataset.evaluate(gallery_det, gallery_feat, probe_feat)
 
 
 if __name__ == '__main__':

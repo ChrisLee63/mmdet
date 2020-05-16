@@ -17,13 +17,21 @@ def single_gpu_test(model,
                     out_dir=None,
                     show_score_thr=0.3):
     model.eval()
-    results = []
+    gallery_det = []
+    gallery_feat = []
+    probe_feat = []
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
         with torch.no_grad():
-            result = model(return_loss=False, rescale=True, **data)
-        results.append(result)
+            if torch.all(data['proposals'][0] == 0):
+                data.pop("proposals")
+                det, feat = model(return_loss=False, rescale=not show, **data)
+                gallery_det.append(det[0])
+                gallery_feat.append(feat)
+            else:
+                det, feat = model(return_loss=False, rescale=not show, **data)
+                probe_feat.append(feat)
 
         if show or out_dir:
             img_tensor = data['img'][0]
@@ -45,7 +53,7 @@ def single_gpu_test(model,
 
                 model.module.show_result(
                     img_show,
-                    result,
+                    det,
                     show=show,
                     out_file=out_file,
                     score_thr=show_score_thr)
@@ -53,7 +61,7 @@ def single_gpu_test(model,
         batch_size = data['img'][0].size(0)
         for _ in range(batch_size):
             prog_bar.update()
-    return results
+    return gallery_det, gallery_feat, probe_feat
 
 
 def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):

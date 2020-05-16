@@ -9,7 +9,7 @@ model = dict(roi_head=dict(bbox_head=dict(num_classes=1)))
 
 # schedule settings
 # optimizer
-optimizer = dict(type="SGD", lr=0.01, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type="SGD", lr=0.008, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
 # actual epoch = 3 * 3 = 9

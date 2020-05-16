@@ -12,10 +12,10 @@ from .custom import CustomDataset
 
 
 class CUHKSYSULoader:
-    def __init__(self, data_root, split):
-        self.data_root = data_root
+    def __init__(self, root_dir, split):
+        self.root_dir = root_dir
         self.split = split
-        self.data_path = osp.join(self.data_root, "Image", "SSM")
+        self.data_path = osp.join(self.root_dir, "Image", "SSM")
         self.image_indexes = self.load_image_indexes()
         self.roidb = self.load_roidb()
         if split == "test":
@@ -35,14 +35,14 @@ class CUHKSYSULoader:
         Load the image indexes for training / testing.
         """
         # Test images
-        test = loadmat(osp.join(self.data_root, "annotation", "pool.mat"))
+        test = loadmat(osp.join(self.root_dir, "annotation", "pool.mat"))
         test = test["pool"].squeeze()
         test = [str(a[0]) for a in test]
         if self.split == "test":
             return test
 
         # All images
-        all_imgs = loadmat(osp.join(self.data_root, "annotation", "Images.mat"))
+        all_imgs = loadmat(osp.join(self.root_dir, "annotation", "Images.mat"))
         all_imgs = all_imgs["Img"].squeeze()
         all_imgs = [str(a[0][0]) for a in all_imgs]
 
@@ -55,7 +55,7 @@ class CUHKSYSULoader:
         """
         Load the list of (img, roi) for probes.
         """
-        protocol = loadmat(osp.join(self.data_root, "annotation/test/train_test/TestG50.mat"))
+        protocol = loadmat(osp.join(self.root_dir, "annotation/test/train_test/TestG50.mat"))
         protocol = protocol["TestG50"].squeeze()
         probes = []
         for item in protocol["Query"]:
@@ -77,7 +77,7 @@ class CUHKSYSULoader:
             width (int): image width
             height (int): image height
         """
-        cache_path = osp.join(self.data_root, "cache")
+        cache_path = osp.join(self.root_dir, "cache")
         if not osp.exists(cache_path):
             os.makedirs(cache_path)
         cache_file = osp.join(cache_path, self.split + "_roidb.pkl")
@@ -85,7 +85,7 @@ class CUHKSYSULoader:
             return unpickle(cache_file)
 
         # Load all images and build a dict from image to boxes
-        all_imgs = loadmat(osp.join(self.data_root, "annotation", "Images.mat"))
+        all_imgs = loadmat(osp.join(self.root_dir, "annotation", "Images.mat"))
         all_imgs = all_imgs["Img"].squeeze()
         name_to_boxes = {}
         name_to_pids = {}
@@ -109,7 +109,7 @@ class CUHKSYSULoader:
         # Load all the train / test persons and label their pids from 0 to N - 1
         # Assign pid = -1 for unlabeled background people
         if self.split == "train":
-            train = loadmat(osp.join(self.data_root, "annotation/test/train_test/Train.mat"))
+            train = loadmat(osp.join(self.root_dir, "annotation/test/train_test/Train.mat"))
             train = train["Train"].squeeze()
             for index, item in enumerate(train):
                 scenes = item[0, 0][2].squeeze()
@@ -118,7 +118,7 @@ class CUHKSYSULoader:
                     box = box.squeeze().astype(np.int32)
                     set_box_pid(name_to_boxes[im_name], box, name_to_pids[im_name], index)
         else:
-            test = loadmat(osp.join(self.data_root, "annotation/test/train_test/TestG50.mat"))
+            test = loadmat(osp.join(self.root_dir, "annotation/test/train_test/TestG50.mat"))
             test = test["TestG50"].squeeze()
             for index, item in enumerate(test):
                 # query
@@ -168,10 +168,10 @@ class CUHKSYSU(CustomDataset):
 
     def load_annotations(self, ann_file):
         img_infos = []
-        for i, image_index in enumerate(self.loader.image_indexes):
+        for i, image_indexes in enumerate(self.loader.image_indexes):
             roidb = self.loader.roidb[i]
             new_entry = {
-                "id": image_index,
+                "id": image_indexes,
                 "filename": roidb["image"],
                 "width": roidb["width"],
                 "height": roidb["height"],
@@ -179,7 +179,7 @@ class CUHKSYSU(CustomDataset):
             if self.split == "train":
                 new_entry["ann"] = {
                     "bboxes": roidb["gt_boxes"].astype(np.float32),
-                    "labels": np.array([0] * roidb["gt_boxes"].shape[0]),
+                    "labels": np.array([1] * roidb["gt_boxes"].shape[0]),
                     "person_ids": roidb["gt_pids"].astype(np.int64),
                 }
             img_infos.append(new_entry)
@@ -294,6 +294,9 @@ class CUHKSYSU(CustomDataset):
         assert dataset.num_images == len(gallery_feat)
         assert len(dataset.probes) == len(probe_feat)
 
+        gallery_feat = [i.cpu().numpy() for i in gallery_feat]
+        probe_feat = [i.cpu().numpy() for i in probe_feat]
+
         # TODO: support evaluation on training split
         use_full_set = gallery_size == -1
         fname = "TestG{}".format(gallery_size if not use_full_set else 50)
@@ -303,7 +306,7 @@ class CUHKSYSU(CustomDataset):
 
         # mapping from gallery image to (det, feat)
         name_to_det_feat = {}
-        for name, det, feat in zip(dataset.image_index, gallery_det, gallery_feat):
+        for name, det, feat in zip(dataset.image_indexes, gallery_det, gallery_feat):
             scores = det[:, 4].ravel()
             inds = np.where(scores >= threshold)[0]
             if len(inds) > 0:
@@ -363,7 +366,7 @@ class CUHKSYSU(CustomDataset):
                 tested.add(gallery_imname)
             # 2. Go through the remaining gallery images if using full set
             if use_full_set:
-                for gallery_imname in dataset.image_index:
+                for gallery_imname in dataset.image_indexes:
                     if gallery_imname in tested:
                         continue
                     if gallery_imname not in name_to_det_feat:
