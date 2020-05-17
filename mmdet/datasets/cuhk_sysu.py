@@ -179,7 +179,7 @@ class CUHKSYSU(CustomDataset):
             if self.split == "train":
                 new_entry["ann"] = {
                     "bboxes": roidb["gt_boxes"].astype(np.float32),
-                    "labels": np.array([1] * roidb["gt_boxes"].shape[0]),
+                    "labels": np.array([0] * roidb["gt_boxes"].shape[0]),
                     "person_ids": roidb["gt_pids"].astype(np.int64),
                 }
             img_infos.append(new_entry)
